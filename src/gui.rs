@@ -21,6 +21,11 @@ enum Msg {
     Error(String),
 }
 
+fn nonempty(s: &str) -> Option<String> {
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_string())
+}
+
 struct App {
     inputs: Vec<PathBuf>,
     output: String,
@@ -32,6 +37,8 @@ struct App {
     fit: Fit,
     sort: Sort,
     source: Source,
+    filter: String,
+    sort_key: String,
     codec: String,
     preset: String,
     recursive: bool,
@@ -59,6 +66,8 @@ impl Default for App {
             fit: Fit::Cover,
             sort: Sort::Name,
             source: Source::Auto,
+            filter: String::new(),
+            sort_key: String::new(),
             codec: "libx264".into(),
             preset: "medium".into(),
             recursive: false,
@@ -106,6 +115,8 @@ impl App {
             fit: self.fit,
             threads: None,
             source: self.source,
+            filter: nonempty(&self.filter),
+            sort_key: nonempty(&self.sort_key),
         }
     }
 
@@ -269,6 +280,24 @@ impl eframe::App for App {
                     }
                 }
                 ui.add(egui::TextEdit::singleline(&mut self.output).desired_width(f32::INFINITY));
+            });
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label("Filter");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.filter)
+                        .hint_text("regex on file name")
+                        .desired_width(f32::INFINITY),
+                );
+            });
+            ui.horizontal(|ui| {
+                ui.label("Order key");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.sort_key)
+                        .hint_text("regex; capture group is the sort key (overrides Order)")
+                        .desired_width(f32::INFINITY),
+                );
             });
 
             ui.add_space(6.0);

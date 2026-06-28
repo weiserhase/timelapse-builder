@@ -79,6 +79,15 @@ impl Encoder {
             .stdout(Stdio::null())
             .stderr(Stdio::inherit());
 
+        // A GUI process has no console of its own, so Windows would otherwise pop
+        // up a console window for the ffmpeg child. CREATE_NO_WINDOW suppresses it.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
         let mut child = cmd
             .spawn()
             .map_err(|e| anyhow::anyhow!("could not launch ffmpeg ({}): {e}", ffmpeg.display()))?;

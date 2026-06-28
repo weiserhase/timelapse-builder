@@ -3,6 +3,7 @@ use crate::decode::RawMode;
 use crate::{collect, decode, encode, ffmpeg};
 use anyhow::{bail, Context, Result};
 use rayon::prelude::*;
+use regex::Regex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::sync_channel;
@@ -27,6 +28,8 @@ pub struct BuildOptions {
     pub fit: Fit,
     pub threads: Option<usize>,
     pub source: Source,
+    pub filter: Option<String>,
+    pub sort_key: Option<String>,
 }
 
 impl Default for BuildOptions {
@@ -48,6 +51,8 @@ impl Default for BuildOptions {
             fit: Fit::Cover,
             threads: None,
             source: Source::Auto,
+            filter: None,
+            sort_key: None,
         }
     }
 }
@@ -89,7 +94,19 @@ pub fn run(opts: &BuildOptions, cancel: &AtomicBool, mut on: impl FnMut(Progress
 
     let mut files =
         collect::gather(&opts.inputs, opts.recursive).context("failed to collect input files")?;
-    collect::order(&mut files, opts.sort, opts.reverse);
+
+    if let Some(pat) = &opts.filter {
+        let re = Regex::new(pat).with_context(|| format!("invalid --filter regex: {pat}"))?;
+        collect::filter(&mut files, &re);
+    }
+
+    match &opts.sort_key {
+        Some(pat) => {
+            let re = Regex::new(pat).with_context(|| format!("invalid --sort-key regex: {pat}"))?;
+            collect::order_by_key(&mut files, &re, opts.reverse);
+        }
+        None => collect::order(&mut files, opts.sort, opts.reverse),
+    }
 
     if opts.every > 1 {
         files = files.into_iter().step_by(opts.every).collect();

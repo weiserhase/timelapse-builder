@@ -30,9 +30,18 @@ pub struct Args {
     #[arg(short, long)]
     pub recursive: bool,
 
+    /// Keep only files whose name matches this regular expression.
+    #[arg(long, value_name = "REGEX")]
+    pub filter: Option<String>,
+
     /// Frame ordering.
     #[arg(long, value_enum, default_value_t = Sort::Name)]
     pub sort: Sort,
+
+    /// Order by a key pulled from each file name with this regex (first capture
+    /// group, else the whole match), natural-sorted. Overrides --sort.
+    #[arg(long, value_name = "REGEX")]
+    pub sort_key: Option<String>,
 
     /// Reverse the final frame order.
     #[arg(long)]

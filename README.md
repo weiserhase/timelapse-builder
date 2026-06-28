@@ -12,11 +12,15 @@ timelapse ./photos -r --sort time --width 3840 --fps 24 -o sunset.mp4
 timelapse ./photos --every 5 --limit 600
 timelapse a.CR2 b.jpg ./more_frames -o mix.mp4
 timelapse ./photos --codec libx265 --crf 24 --preset slow
+# keep only matching files, then order by a number pulled from the name
+timelapse ./photos --filter 'DSC0\d+\.ARW' --sort-key 'DSC0(\d+)'
 ```
 
 Run `timelapse --help` for all flags. Common ones: `-o/--output`, `--fps`,
 `--width`/`--height`, `--fit` (cover/contain/stretch), `--sort` (name/time/none),
-`-r`, `--every N`, `--limit N`, `--reverse`, `--codec`, `--crf`, `--preset`,
+`--filter REGEX` (keep only files whose name matches), `--sort-key REGEX` (order
+by the first capture group, natural-sorted; overrides `--sort`), `-r`,
+`--every N`, `--limit N`, `--reverse`, `--codec`, `--crf`, `--preset`,
 `--threads`.
 
 ## ffmpeg

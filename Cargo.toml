@@ -26,12 +26,21 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 rawler = "0.7"
 walkdir = "2.5"
 indicatif = "0.17"
+regex = "1.10"
 eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 rfd = { version = "0.15", optional = true }
+wgpu = { version = "22.1", optional = true }
+pollster = { version = "0.3", optional = true }
+bytemuck = { version = "1.16", optional = true, features = ["derive"] }
 
 [features]
+default = ["gpu"]
 embed-ffmpeg = []
 gui = ["dep:eframe", "dep:rfd"]
+# GPU-accelerated RAW demosaic via wgpu (D3D12/Vulkan/Metal). Compiled in by
+# default; at runtime it falls back to the CPU developer when no hardware GPU
+# is available, so the binary still works everywhere.
+gpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 
 [profile.release]
 opt-level = 3

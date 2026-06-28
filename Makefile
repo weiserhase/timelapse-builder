@@ -9,12 +9,12 @@ ARGS        ?=
 .DEFAULT_GOAL := help
 
 .PHONY: build
-build: ## Debug build
-	cargo build
+build: ## Debug build (CLI + GUI)
+	cargo build --features gui --bins
 
 .PHONY: release
-release: ## Optimized release build
-	cargo build --release
+release: ## Optimized release build (CLI + GUI)
+	cargo build --release --features gui --bins
 
 .PHONY: test
 test: ## Run tests
@@ -29,8 +29,12 @@ clippy: ## Lint with clippy
 	cargo clippy --all-targets -- -D warnings
 
 .PHONY: run
-run: ## Run: make run ARGS="./photos -o out.mp4"
-	cargo run --release -- $(ARGS)
+run: ## Run the CLI: make run ARGS="./photos -o out.mp4"
+	cargo run --release --bin $(BIN) -- $(ARGS)
+
+.PHONY: gui
+gui: ## Launch the GUI app
+	cargo run --release --features gui --bin $(GUI)
 
 .PHONY: bundle
 bundle: ## Linux self-contained folder + tar.gz (CLI + GUI + ffmpeg)

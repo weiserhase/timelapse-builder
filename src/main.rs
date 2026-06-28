@@ -31,6 +31,8 @@ fn real_main() -> Result<()> {
         fit: args.fit,
         threads: args.threads,
         source: args.source,
+        filter: args.filter,
+        sort_key: args.sort_key,
     };
 
     let mut pb: Option<ProgressBar> = None;

@@ -26,6 +26,25 @@ pub fn load_rgb(path: &Path, mode: RawMode) -> Result<RgbImage> {
 }
 
 fn develop_raw(path: &Path) -> Result<RgbImage> {
+    // GPU demosaic is the default develop backend; it never replaces the CPU
+    // path — on any failure (no GPU, unsupported sensor, device loss) we fall
+    // back to rawler. Set TIMELAPSE_CPU_DEVELOP=1 to force the CPU developer.
+    #[cfg(feature = "gpu")]
+    {
+        if std::env::var_os("TIMELAPSE_CPU_DEVELOP").is_none() {
+            match crate::gpu::develop(path) {
+                Ok(img) => {
+                    note_develop_backend(true);
+                    return Ok(img);
+                }
+                Err(e) => note_develop_fallback(&e),
+            }
+        }
+    }
+    develop_raw_cpu(path)
+}
+
+fn develop_raw_cpu(path: &Path) -> Result<RgbImage> {
     use rawler::imgop::develop::RawDevelop;
 
     let raw = rawler::decode_file(path)
@@ -37,6 +56,27 @@ fn develop_raw(path: &Path) -> Result<RgbImage> {
         .to_dynamic_image()
         .ok_or_else(|| anyhow!("raw {} produced no image", path.display()))?;
     Ok(img.to_rgb8())
+}
+
+/// Report the chosen RAW develop backend exactly once, on stderr.
+#[cfg(feature = "gpu")]
+fn note_develop_backend(_gpu: bool) {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        if let Some(info) = crate::gpu::describe() {
+            eprintln!("\x1b[2mGPU demosaic: {info}\x1b[0m");
+        }
+    });
+}
+
+#[cfg(feature = "gpu")]
+fn note_develop_fallback(err: &anyhow::Error) {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        eprintln!("\x1b[2mGPU demosaic unavailable ({err:#}); using CPU developer\x1b[0m");
+    });
 }
 
 fn preview_raw(path: &Path) -> Result<RgbImage> {

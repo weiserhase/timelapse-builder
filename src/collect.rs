@@ -1,5 +1,6 @@
 use crate::cli::Sort;
 use anyhow::{bail, Result};
+use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
@@ -63,6 +64,36 @@ pub fn order(files: &mut [PathBuf], sort: Sort, reverse: bool) {
     if reverse {
         files.reverse();
     }
+}
+
+/// Keep only files whose name matches `re`.
+pub fn filter(files: &mut Vec<PathBuf>, re: &Regex) {
+    files.retain(|p| re.is_match(file_name(p)));
+}
+
+/// Order by a key extracted from each file name: the first capture group if the
+/// regex has one, otherwise the whole match, otherwise empty. Keys are
+/// natural-sorted so embedded numbers order numerically.
+pub fn order_by_key(files: &mut [PathBuf], re: &Regex, reverse: bool) {
+    files.sort_by(|a, b| natural_cmp(&extract_key(a, re), &extract_key(b, re)));
+    if reverse {
+        files.reverse();
+    }
+}
+
+fn extract_key(p: &Path, re: &Regex) -> String {
+    match re.captures(file_name(p)) {
+        Some(c) => c
+            .get(1)
+            .or_else(|| c.get(0))
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_default(),
+        None => String::new(),
+    }
+}
+
+fn file_name(p: &Path) -> &str {
+    p.file_name().and_then(|s| s.to_str()).unwrap_or("")
 }
 
 fn key(p: &Path) -> String {
@@ -129,5 +160,24 @@ mod tests {
         order(&mut v, Sort::Name, false);
         let got: Vec<_> = v.iter().map(|p| p.to_str().unwrap()).collect();
         assert_eq!(got, ["img1.png", "img2.png", "img10.png", "img21.png"]);
+    }
+
+    #[test]
+    fn filter_keeps_matching_names() {
+        let mut v: Vec<PathBuf> = ["a_keep_1.png", "b_skip_2.png", "c_keep_3.png"]
+            .iter().map(PathBuf::from).collect();
+        filter(&mut v, &Regex::new("keep").unwrap());
+        let got: Vec<_> = v.iter().map(|p| p.to_str().unwrap()).collect();
+        assert_eq!(got, ["a_keep_1.png", "c_keep_3.png"]);
+    }
+
+    #[test]
+    fn order_by_capture_group() {
+        // Sort by the number after "seq", ignoring the leading shuffled prefix.
+        let mut v: Vec<PathBuf> = ["z_seq10.png", "a_seq2.png", "m_seq1.png"]
+            .iter().map(PathBuf::from).collect();
+        order_by_key(&mut v, &Regex::new(r"seq(\d+)").unwrap(), false);
+        let got: Vec<_> = v.iter().map(|p| p.to_str().unwrap()).collect();
+        assert_eq!(got, ["m_seq1.png", "a_seq2.png", "z_seq10.png"]);
     }
 }
