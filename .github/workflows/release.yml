@@ -30,10 +30,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             platform: windows
             ext: ".exe"
-          - os: macos-13
-            target: x86_64-apple-darwin
-            platform: macos
-            ext: ""
+          # - os: macos-13
+          #   target: x86_64-apple-darwin
+          #   platform: macos
+          #   ext: ""
 
     steps:
       - uses: actions/checkout@v4

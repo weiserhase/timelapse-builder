@@ -8,6 +8,23 @@ dest="$(cd "$dest" && pwd)"
 
 log() { echo ">> $*" >&2; }
 
+# Extract a .zip into a directory. The `tar` on a runner's bash can be MSYS2
+# GNU tar (no zip support), so try several extractors and use whichever exists.
+extract_zip() {
+  local zip="$1" out="$2"
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -qo "$zip" -d "$out"
+  elif command -v 7z >/dev/null 2>&1; then
+    7z x -y -o"$out" "$zip" >/dev/null
+  elif [[ -x /c/Windows/System32/tar.exe ]]; then
+    /c/Windows/System32/tar.exe -xf "$zip" -C "$out"   # Windows bsdtar (libarchive)
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$zip" "$out"
+  else
+    tar -xf "$zip" -C "$out"   # last resort (bsdtar on macOS handles zip)
+  fi
+}
+
 btbn="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
 
 case "$os" in
@@ -23,7 +40,7 @@ case "$os" in
     url="$btbn/ffmpeg-master-latest-win64-gpl.zip"
     log "downloading $url"
     curl -fL "$url" -o "$dest/ffmpeg.zip"
-    tar -xf "$dest/ffmpeg.zip" -C "$dest"
+    extract_zip "$dest/ffmpeg.zip" "$dest"
     src="$(find "$dest" -type f -name ffmpeg.exe | head -n1)"
     out="$dest/ffmpeg.exe"
     ;;
@@ -31,7 +48,7 @@ case "$os" in
     url="https://evermeet.cx/ffmpeg/getrelease/zip"
     log "downloading $url"
     curl -fL "$url" -o "$dest/ffmpeg.zip"
-    tar -xf "$dest/ffmpeg.zip" -C "$dest"
+    extract_zip "$dest/ffmpeg.zip" "$dest"
     src="$(find "$dest" -type f -name ffmpeg | head -n1)"
     out="$dest/ffmpeg"
     ;;
