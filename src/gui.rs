@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
 use eframe::egui;
-use timelapse_builder::{run, BuildOptions, Fit, Progress, Sort};
+use timelapse_builder::{run, BuildOptions, Fit, Progress, Sort, Source};
 
 const CODECS: &[&str] =
     &["libx264", "libx265", "libvpx-vp9", "h264_nvenc", "hevc_nvenc", "av1_nvenc"];
@@ -31,6 +31,7 @@ struct App {
     every: u32,
     fit: Fit,
     sort: Sort,
+    source: Source,
     codec: String,
     preset: String,
     recursive: bool,
@@ -57,6 +58,7 @@ impl Default for App {
             every: 1,
             fit: Fit::Cover,
             sort: Sort::Name,
+            source: Source::Auto,
             codec: "libx264".into(),
             preset: "medium".into(),
             recursive: false,
@@ -103,6 +105,7 @@ impl App {
             codec: self.codec.clone(),
             fit: self.fit,
             threads: None,
+            source: self.source,
         }
     }
 
@@ -313,6 +316,22 @@ impl eframe::App for App {
                                 ui.selectable_value(&mut self.preset, p.to_string(), *p);
                             }
                         });
+                    ui.end_row();
+
+                    ui.label("RAW source");
+                    egui::ComboBox::from_id_salt("source")
+                        .selected_text(format!("{:?}", self.source))
+                        .show_ui(ui, |ui| {
+                            for s in [Source::Auto, Source::Raw, Source::Preview] {
+                                ui.selectable_value(&mut self.source, s, format!("{s:?}"));
+                            }
+                        })
+                        .response
+                        .on_hover_text(
+                            "Auto: embedded preview when large enough, else demosaic.\n\
+                             Raw: always demosaic (best quality).\n\
+                             Preview: always use the camera JPEG (fastest).",
+                        );
                     ui.end_row();
 
                     ui.label("Width (0 = auto)");

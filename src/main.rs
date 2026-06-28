@@ -30,6 +30,7 @@ fn real_main() -> Result<()> {
         codec: args.codec,
         fit: args.fit,
         threads: args.threads,
+        source: args.source,
     };
 
     let mut pb: Option<ProgressBar> = None;

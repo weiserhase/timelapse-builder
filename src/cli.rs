@@ -63,6 +63,12 @@ pub struct Args {
     #[arg(long, value_enum, default_value_t = Fit::Cover)]
     pub fit: Fit,
 
+    /// Where RAW pixels come from. `preview` extracts the camera's embedded
+    /// JPEG (much faster, camera color); `raw` always demosaics; `auto` uses
+    /// the preview when it is large enough for the output, else demosaics.
+    #[arg(long, value_enum, default_value_t = Source::Auto)]
+    pub source: Source,
+
     /// Number of decode threads (default: all available cores).
     #[arg(long, value_name = "N")]
     pub threads: Option<usize>,
@@ -76,6 +82,16 @@ pub enum Sort {
     Time,
     /// Keep the order given on the command line.
     None,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Source {
+    /// Use the embedded preview when it covers the output size, else demosaic.
+    Auto,
+    /// Always demosaic the RAW sensor data (best quality, slowest).
+    Raw,
+    /// Always use the camera's embedded JPEG preview (fastest).
+    Preview,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]

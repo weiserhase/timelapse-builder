@@ -59,7 +59,7 @@ jobs:
       - name: Build (CLI + GUI)
         run: cargo build --release --target ${{ matrix.target }} --features gui --bins
 
-      - name: Package (binaries + ffmpeg)
+      - name: Stage bundle (binaries + ffmpeg)
         shell: bash
         run: |
           set -euo pipefail
@@ -70,14 +70,22 @@ jobs:
           FF="$(bash scripts/fetch-ffmpeg.sh ${{ matrix.platform }} dist/.ff)"
           cp "$FF" "dist/${STAGE}/"
           cp README.md "dist/${STAGE}/" 2>/dev/null || true
+          echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
 
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            tar -a -cf "dist/${STAGE}.zip" -C dist "${STAGE}"   # bsdtar emits a real .zip
-            echo "ASSET=dist/${STAGE}.zip" >> "$GITHUB_ENV"
-          else
-            tar -czf "dist/${STAGE}.tar.gz" -C dist "${STAGE}"
-            echo "ASSET=dist/${STAGE}.tar.gz" >> "$GITHUB_ENV"
-          fi
+      - name: Archive (tar.gz)
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "dist/${STAGE}.tar.gz" -C dist "${STAGE}"
+          echo "ASSET=dist/${STAGE}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Archive (zip)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/$env:STAGE" -DestinationPath "dist/$env:STAGE.zip" -Force
+          "ASSET=dist/$env:STAGE.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
