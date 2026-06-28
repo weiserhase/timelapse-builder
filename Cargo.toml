@@ -5,9 +5,18 @@ edition = "2021"
 description = "Blazingly fast timelapse builder from PNG/JPG/WebP/RAW stills"
 license = "MIT"
 
+[lib]
+name = "timelapse_builder"
+path = "src/lib.rs"
+
 [[bin]]
 name = "timelapse"
 path = "src/main.rs"
+
+[[bin]]
+name = "timelapse-gui"
+path = "src/gui.rs"
+required-features = ["gui"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -17,9 +26,12 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 rawler = "0.7"
 walkdir = "2.5"
 indicatif = "0.17"
+eframe = { version = "0.29", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+rfd = { version = "0.15", optional = true }
 
 [features]
 embed-ffmpeg = []
+gui = ["dep:eframe", "dep:rfd"]
 
 [profile.release]
 opt-level = 3

@@ -1,5 +1,6 @@
 NAME        := timelapse-builder
 BIN         := timelapse
+GUI         := timelapse-gui
 DIST        := dist
 WIN_TARGET  := x86_64-pc-windows-gnu
 ARCH        := $(shell uname -m)
@@ -32,10 +33,11 @@ run: ## Run: make run ARGS="./photos -o out.mp4"
 	cargo run --release -- $(ARGS)
 
 .PHONY: bundle
-bundle: release ## Linux self-contained folder + tar.gz
+bundle: ## Linux self-contained folder + tar.gz (CLI + GUI + ffmpeg)
+	cargo build --release --features gui --bins
 	@rm -rf "$(DIST)/$(NAME)-linux-$(ARCH)"
 	@mkdir -p "$(DIST)/$(NAME)-linux-$(ARCH)"
-	cp target/release/$(BIN) "$(DIST)/$(NAME)-linux-$(ARCH)/"
+	cp target/release/$(BIN) target/release/$(GUI) "$(DIST)/$(NAME)-linux-$(ARCH)/"
 	scripts/fetch-ffmpeg.sh linux "$(DIST)/.ff-linux" >/dev/null
 	cp "$(DIST)/.ff-linux/ffmpeg" "$(DIST)/$(NAME)-linux-$(ARCH)/"
 	cp README.md "$(DIST)/$(NAME)-linux-$(ARCH)/" 2>/dev/null || true
@@ -43,19 +45,19 @@ bundle: release ## Linux self-contained folder + tar.gz
 	@echo ">> $(DIST)/$(NAME)-linux-$(ARCH).tar.gz"
 
 .PHONY: windows
-windows: ## Cross-compile timelapse.exe (needs: rustup target add + mingw-w64)
+windows: ## Cross-compile the Windows .exes (needs: rustup target add + mingw-w64)
 	@command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || { \
 	  echo "!! mingw-w64 linker not found. Install it (Debian: sudo apt install mingw-w64),"; \
 	  echo "   or just push a tag and let GitHub Actions build the Windows binary."; exit 1; }
 	rustup target add $(WIN_TARGET)
-	cargo build --release --target $(WIN_TARGET)
-	@echo ">> target/$(WIN_TARGET)/release/$(BIN).exe"
+	cargo build --release --target $(WIN_TARGET) --features gui --bins
+	@echo ">> target/$(WIN_TARGET)/release/$(BIN).exe + $(GUI).exe"
 
 .PHONY: win-bundle
-win-bundle: windows ## Windows self-contained folder + zip
+win-bundle: windows ## Windows self-contained folder + zip (CLI + GUI + ffmpeg)
 	@rm -rf "$(DIST)/$(NAME)-windows-x86_64"
 	@mkdir -p "$(DIST)/$(NAME)-windows-x86_64"
-	cp target/$(WIN_TARGET)/release/$(BIN).exe "$(DIST)/$(NAME)-windows-x86_64/"
+	cp target/$(WIN_TARGET)/release/$(BIN).exe target/$(WIN_TARGET)/release/$(GUI).exe "$(DIST)/$(NAME)-windows-x86_64/"
 	scripts/fetch-ffmpeg.sh windows "$(DIST)/.ff-win" >/dev/null
 	cp "$(DIST)/.ff-win/ffmpeg.exe" "$(DIST)/$(NAME)-windows-x86_64/"
 	cp README.md "$(DIST)/$(NAME)-windows-x86_64/" 2>/dev/null || true

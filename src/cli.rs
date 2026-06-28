@@ -54,7 +54,8 @@ pub struct Args {
     #[arg(long, default_value = "medium")]
     pub preset: String,
 
-    /// Video codec passed to ffmpeg (e.g. libx264, libx265, libvpx-vp9).
+    /// Video codec passed to ffmpeg. CPU: libx264, libx265, libvpx-vp9.
+    /// GPU (NVIDIA): h264_nvenc, hevc_nvenc, av1_nvenc.
     #[arg(long, default_value = "libx264")]
     pub codec: String,
 
@@ -67,7 +68,7 @@ pub struct Args {
     pub threads: Option<usize>,
 }
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Sort {
     /// Natural sort by file name (img2 before img10).
     Name,
@@ -87,8 +88,13 @@ pub enum Fit {
     Stretch,
 }
 
-pub fn target_dimensions(args: &Args, src_w: u32, src_h: u32) -> (u32, u32) {
-    let (w, h) = match (args.width, args.height) {
+pub fn resolve_dimensions(
+    width: Option<u32>,
+    height: Option<u32>,
+    src_w: u32,
+    src_h: u32,
+) -> (u32, u32) {
+    let (w, h) = match (width, height) {
         (Some(w), Some(h)) => (w, h),
         (Some(w), None) => {
             let h = (w as f64 * src_h as f64 / src_w as f64).round() as u32;

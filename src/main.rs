@@ -1,130 +1,98 @@
-mod cli;
-mod collect;
-mod decode;
-mod encode;
-mod ffmpeg;
-
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use rayon::prelude::*;
-use std::io::Write;
-use std::time::Instant;
-
-use cli::Args;
+use std::sync::atomic::AtomicBool;
+use timelapse_builder::cli::Args;
+use timelapse_builder::{run, BuildOptions, Progress};
 
 fn main() {
-    if let Err(e) = run() {
+    if let Err(e) = real_main() {
         eprintln!("\x1b[31merror:\x1b[0m {e:#}");
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<()> {
+fn real_main() -> Result<()> {
     let args = Args::parse();
-    let started = Instant::now();
+    let opts = BuildOptions {
+        inputs: args.inputs,
+        output: args.output,
+        fps: args.fps,
+        width: args.width,
+        height: args.height,
+        recursive: args.recursive,
+        sort: args.sort,
+        reverse: args.reverse,
+        every: args.every,
+        limit: args.limit,
+        crf: args.crf,
+        preset: args.preset,
+        codec: args.codec,
+        fit: args.fit,
+        threads: args.threads,
+    };
 
-    if let Some(n) = args.threads {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(n.max(1))
-            .build_global()
-            .ok();
-    }
+    let mut pb: Option<ProgressBar> = None;
+    let cancel = AtomicBool::new(false);
 
-    let ffmpeg_bin = ffmpeg::locate().context(
-        "could not find an ffmpeg binary. Place `ffmpeg` next to this executable, \
-         put it on your PATH, or install it (Debian/Ubuntu: `sudo apt install ffmpeg`)",
-    )?;
-
-    let mut files = collect::gather(&args.inputs, args.recursive)
-        .context("failed to collect input files")?;
-    collect::order(&mut files, args.sort, args.reverse);
-
-    if args.every > 1 {
-        files = files.into_iter().step_by(args.every).collect();
-    }
-    if let Some(limit) = args.limit {
-        files.truncate(limit);
-    }
-
-    if files.is_empty() {
-        bail!("no supported image files found (png, jpg, jpeg, webp, or raw)");
-    }
-
-    let probe = decode::load_rgb(&files[0])
-        .with_context(|| format!("failed to decode first frame: {}", files[0].display()))?;
-    let (tw, th) = cli::target_dimensions(&args, probe.width(), probe.height());
-
-    eprintln!(
-        "timelapse-builder: {} frames \u{2192} {}x{} @ {} fps  ({} threads, ffmpeg: {})",
-        files.len(),
-        tw,
-        th,
-        args.fps,
-        rayon::current_num_threads(),
-        ffmpeg_bin.display(),
-    );
-
-    let mut enc = encode::Encoder::start(&ffmpeg_bin, &args, tw, th)
-        .context("failed to start ffmpeg encoder")?;
-
-    let pb = ProgressBar::new(files.len() as u64);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}",
-        )
-        .unwrap()
-        .progress_chars("=>-"),
-    );
-
-    let frame_bytes = (tw as usize) * (th as usize) * 3;
-    let batch = (512 * 1024 * 1024 / frame_bytes.max(1)).clamp(4, 256);
-    let fit = args.fit;
-    let mut skipped = 0usize;
-
-    for chunk in files.chunks(batch) {
-        let frames: Vec<Result<Vec<u8>>> = chunk
-            .par_iter()
-            .map(|path| decode::load_frame(path, tw, th, fit))
-            .collect();
-
-        for (path, frame) in chunk.iter().zip(frames) {
-            match frame {
-                Ok(buf) => {
-                    debug_assert_eq!(buf.len(), frame_bytes);
-                    enc.write_frame(&buf).with_context(|| {
-                        "ffmpeg closed the pipe early (encoder failed); run with a visible \
-                         terminal to see its diagnostics"
-                    })?;
-                }
-                Err(e) => {
-                    skipped += 1;
-                    pb.suspend(|| {
-                        eprintln!("\x1b[33mskip\x1b[0m {}: {e:#}", path.display());
-                    });
-                }
-            }
-            pb.inc(1);
+    run(&opts, &cancel, |progress| match progress {
+        Progress::Started {
+            total,
+            width,
+            height,
+            ffmpeg,
+        } => {
+            eprintln!(
+                "timelapse-builder: {total} frames \u{2192} {width}x{height} @ {} fps  (ffmpeg: {})",
+                opts.fps,
+                ffmpeg.display(),
+            );
+            let bar = ProgressBar::new(total as u64);
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) {msg}",
+                )
+                .unwrap()
+                .progress_chars("=>-"),
+            );
+            pb = Some(bar);
         }
-        let _ = std::io::stderr().flush();
-    }
-
-    pb.finish_and_clear();
-
-    enc.finish().context("ffmpeg encoding failed")?;
-
-    let encoded = files.len() - skipped;
-    eprintln!(
-        "\x1b[32mdone\x1b[0m {} ({} frames in {:.1}s{})",
-        args.output.display(),
-        encoded,
-        started.elapsed().as_secs_f64(),
-        if skipped > 0 {
-            format!(", {skipped} skipped")
-        } else {
-            String::new()
-        },
-    );
-
-    Ok(())
+        Progress::Advanced { done, .. } => {
+            if let Some(bar) = &pb {
+                bar.set_position(done as u64);
+            }
+        }
+        Progress::Skipped { path, error } => {
+            let line = format!("\x1b[33mskip\x1b[0m {}: {error}", path.display());
+            match &pb {
+                Some(bar) => bar.suspend(|| eprintln!("{line}")),
+                None => eprintln!("{line}"),
+            }
+        }
+        Progress::Finished {
+            encoded,
+            skipped,
+            elapsed,
+            output,
+        } => {
+            if let Some(bar) = pb.take() {
+                bar.finish_and_clear();
+            }
+            let extra = if skipped > 0 {
+                format!(", {skipped} skipped")
+            } else {
+                String::new()
+            };
+            eprintln!(
+                "\x1b[32mdone\x1b[0m {} ({encoded} frames in {elapsed:.1}s{extra})",
+                output.display(),
+            );
+        }
+        Progress::Cancelled { encoded } => {
+            if let Some(bar) = pb.take() {
+                bar.finish_and_clear();
+            }
+            eprintln!("\x1b[33mcancelled\x1b[0m after {encoded} frames");
+        }
+    })
 }

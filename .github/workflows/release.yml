@@ -13,6 +13,7 @@ permissions:
 env:
   NAME: timelapse-builder
   BIN: timelapse
+  GUI_BIN: timelapse-gui
 
 jobs:
   build:
@@ -48,16 +49,24 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Install Linux GUI deps
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
 
-      - name: Package (binary + ffmpeg)
+      - name: Build (CLI + GUI)
+        run: cargo build --release --target ${{ matrix.target }} --features gui --bins
+
+      - name: Package (binaries + ffmpeg)
         shell: bash
         run: |
           set -euo pipefail
           STAGE="${NAME}-${{ matrix.platform }}-x86_64"
           mkdir -p "dist/${STAGE}"
           cp "target/${{ matrix.target }}/release/${BIN}${{ matrix.ext }}" "dist/${STAGE}/"
+          cp "target/${{ matrix.target }}/release/${GUI_BIN}${{ matrix.ext }}" "dist/${STAGE}/"
           FF="$(bash scripts/fetch-ffmpeg.sh ${{ matrix.platform }} dist/.ff)"
           cp "$FF" "dist/${STAGE}/"
           cp README.md "dist/${STAGE}/" 2>/dev/null || true
